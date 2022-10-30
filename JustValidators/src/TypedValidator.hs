@@ -6,9 +6,8 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE OverloadedStrings   #-}
 
-module CustomTypedValidator where
+module TypedValidator where
 
 import           Control.Monad       hiding (fmap)
 import           Data.Map            as Map
@@ -29,33 +28,27 @@ import           Playground.Types    (KnownCurrency (..))
 import           Prelude             (IO, Semigroup (..), String)
 import           Text.Printf         (printf)
 import           Data.Aeson           (FromJSON, ToJSON)
-import           GHC.Generics         (Generic)  
+import           GHC.Generics         (Generic)     
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
-newtype MyWonderfullRedeemer = MWR Integer
-newtype MyWonderfullDatum = MWD Integer
+--ON CHAIN RELATED
 
---PlutusTx.unstableMakeIsData ''MyWonderfullRedeemer
---PlutusTx.unstableMakeIsData ''MyWonderfullDatum
-
-PlutusTx.makeIsDataIndexed ''MyWonderfullRedeemer [('MWR,0)]
-PlutusTx.makeIsDataIndexed ''MyWonderfullDatum [('MWD,0)]
-
-customTypedValidator :: MyWonderfullDatum -> MyWonderfullRedeemer -> ScriptContext -> Bool
-customTypedValidator (MWD datum) (MWR redeemer) _ = traceIfFalse "Wrong redeemer!"  (redeemer == datum)
+{-# INLINABLE typedValidator #-}
+typedValidator :: Integer -> Integer -> ScriptContext -> Bool
+typedValidator datum redeemer _ = traceIfFalse "Wrong redeemer!"  (redeemer == datum)
 
 data Typed
 instance Scripts.ValidatorTypes Typed where
-    type instance DatumType Typed = MyWonderfullDatum
-    type instance RedeemerType Typed = MyWonderfullRedeemer
+    type instance DatumType Typed = Integer
+    type instance RedeemerType Typed = Integer
 
 tValidator :: Scripts.TypedValidator Typed
 tValidator = Scripts.mkTypedValidator @Typed 
-          $$(PlutusTx.compile [|| customTypedValidator ||])
+          $$(PlutusTx.compile [|| typedValidator ||])
           $$(PlutusTx.compile [|| wrap ||])
     where
-        wrap = Scripts.wrapValidator @MyWonderfullDatum @MyWonderfullRedeemer
+        wrap = Scripts.wrapValidator @Integer @Integer
 
 validator :: Validator
 validator = Scripts.validatorScript tValidator
@@ -77,9 +70,9 @@ data GiveParams = GP {
 
 give :: AsContractError e => GiveParams -> Contract w s e ()
 give gparams = do
-     let tx = mustPayToTheScript (MWD $ gpDatum gparams)  $ Ada.lovelaceValueOf $ gpAmount gparams 
+     let tx = mustPayToTheScript (gpDatum gparams)  $ Ada.lovelaceValueOf $ gpAmount gparams 
      ledgerTx <- submitTxConstraints tValidator tx
-     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                                  
+     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                                                --This line waits for confirmation
      logInfo @String $ printf "Send some value %d lovelace to the contract." $ gpAmount gparams    
     
 grab :: forall w s e. AsContractError e => Integer -> Contract w s e ()                                     
@@ -89,7 +82,7 @@ grab n = do
         lookups = Constraints.unspentOutputs utxos      <>                                           -- Tell where to find all the UTXOS
                   Constraints.otherScript validator                                                  -- and inform about the actual validator (the spending tx needs to provide the actual validator)
         tx :: TxConstraints Void Void                                                            
-        tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ PlutusTx.toBuiltinData (MWR n) | oref <- orefs]  -- Define the TX giving constrains, one for each UTXO sitting on this addrs,
+        tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ Builtins.mkI n | oref <- orefs]  -- Define the TX giving constrains, one for each UTXO sitting on this addrs,
                                                                                                      
     ledgerTx <- submitTxConstraintsWith @Void lookups tx                                             -- Allow the wallet to construct the tx with the necesary information
     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                                                -- Wait for confirmation
