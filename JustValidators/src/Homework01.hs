@@ -56,7 +56,6 @@ scrAddress = scriptAddress validator
 --THE OFFCHAIN RELATED CODE
 data GiveParams = GP { gpAmount :: Integer, gpDatum :: Integer } deriving (Generic, FromJSON, ToJSON, ToSchema)
 
-
 type GiftSchema =
             Endpoint "give" GiveParams  
         .\/ Endpoint "grab" Integer
@@ -81,6 +80,9 @@ grab n = do
     ledgerTx <- submitTxConstraintsWith @Void lookups tx                                             -- Allow the wallet to construct the tx with the necesary information
     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                                                -- Wait for confirmation
     logInfo @String $ "collected gifts"                                                              -- Log information 
+
+-- Alternative route solution (line 78)
+-- (mustSpendScriptOutput oref1 $ Redeemer $ Builtins.mkI 19) <> (mustSpendScriptOutput oref2 $ Redeemer $ Builtins.mkI 7)
 
 endpoints :: Contract () GiftSchema Text ()
 endpoints = awaitPromise (give' `select` grab') >> endpoints                                         -- Asynchronously wait for the endpoints interactions from the wallet
