@@ -127,3 +127,21 @@ test01 = runEmulatorTraceIO $ do
           callEndpoint @"grab" h2 100 
           s <- Emulator.waitNSlots 10
           Extras.logInfo $ "End of Simulation at slot " ++ show s          
+
+
+test02 :: IO ()
+test02 = runEmulatorTraceIO $ do
+          h1 <- activateContractWallet (knownWallet 1) endpoints
+          h2 <- activateContractWallet (knownWallet 2) endpoints
+          h3 <- activateContractWallet (knownWallet 3) endpoints
+          callEndpoint @"give" h1 $ GP {
+                                      gpAmount = 11000000
+                                    , gpDatum  = 10}
+          void $ Emulator.waitNSlots 10
+          callEndpoint @"give" h2 $ GP {
+                                      gpAmount = 22000000
+                                    , gpDatum  = 10}
+          void $ Emulator.waitNSlots 10
+          callEndpoint @"grab" h3 10 
+          s <- Emulator.waitNSlots 10
+          Extras.logInfo $ "End of Simulation at slot " ++ show s   

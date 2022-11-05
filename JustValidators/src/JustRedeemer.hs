@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeApplications    #-}  --Allow the use of type application syntax
 {-# LANGUAGE TypeFamilies        #-}  --Allow use and definition of indexed type and data families
 {-# LANGUAGE TypeOperators       #-}  --Allow the use and definition of types with operator names
+{-# LANGUAGE OverloadedStrings   #-}
 
 module JustRedeemer where
 
