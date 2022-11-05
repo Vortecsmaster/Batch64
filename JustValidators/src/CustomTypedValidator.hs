@@ -7,6 +7,8 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE DeriveAnyClass      #-}
+{-# LANGUAGE DeriveGeneric       #-}
 
 module CustomTypedValidator where
 
@@ -42,6 +44,7 @@ newtype MyWonderfullDatum = MWD Integer
 PlutusTx.makeIsDataIndexed ''MyWonderfullRedeemer [('MWR,0)]
 PlutusTx.makeIsDataIndexed ''MyWonderfullDatum [('MWD,0)]
 
+{-# INLINABLE customTypedValidator #-}
 customTypedValidator :: MyWonderfullDatum -> MyWonderfullRedeemer -> ScriptContext -> Bool
 customTypedValidator (MWD datum) (MWR redeemer) _ = traceIfFalse "Wrong redeemer!"  (redeemer == datum)
 
