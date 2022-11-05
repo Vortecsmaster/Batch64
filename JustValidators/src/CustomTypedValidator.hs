@@ -12,26 +12,32 @@
 
 module CustomTypedValidator where
 
-import           Control.Monad       hiding (fmap)
-import           Data.Map            as Map
-import           Data.Text           (Text)
-import           Data.Void           (Void)
+import           Control.Monad          hiding (fmap)
+import           Data.Map               as Map
+import           Data.Text              (Text)
+import           Data.Void              (Void)
 import           Plutus.Contract
-import           PlutusTx            (Data (..))
+import           PlutusTx               (Data (..))
 import qualified PlutusTx
-import qualified PlutusTx.Builtins   as Builtins
-import           PlutusTx.Prelude    hiding (Semigroup(..), unless)
-import           Ledger              hiding (singleton)
-import           Ledger.Constraints  as Constraints
-import qualified Ledger.Typed.Scripts      as Scripts
-import           Ledger.Ada          as Ada
-import           Playground.Contract (printJson, printSchemas, ensureKnownCurrencies, stage, ToSchema)
-import           Playground.TH       (mkKnownCurrencies, mkSchemaDefinitions)
-import           Playground.Types    (KnownCurrency (..))
-import           Prelude             (IO, Semigroup (..), String)
-import           Text.Printf         (printf)
-import           Data.Aeson           (FromJSON, ToJSON)
-import           GHC.Generics         (Generic)  
+import qualified PlutusTx.Builtins      as Builtins
+import           PlutusTx.Prelude       hiding (Semigroup(..), unless)
+import           Ledger                 hiding (singleton)
+import           Ledger.Constraints     as Constraints
+import qualified Ledger.Typed.Scripts   as Scripts
+import           Ledger.Ada             as Ada
+import           Playground.Contract    (printJson, printSchemas, ensureKnownCurrencies, stage, ToSchema)
+import           Playground.TH          (mkKnownCurrencies, mkSchemaDefinitions)
+import           Playground.Types       (KnownCurrency (..))
+import           Prelude                (IO, Semigroup (..), String, show)
+import           Text.Printf            (printf)
+import           Data.Aeson             (FromJSON, ToJSON)
+import           GHC.Generics           (Generic)  
+import qualified Plutus.Trace           as Trace
+import           Plutus.Trace.Emulator  as Emulator
+import           Wallet.Emulator.Wallet
+import           Control.Monad.Freer.Extras           as Extras
+
+
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
@@ -83,7 +89,7 @@ give gparams = do
      let tx = mustPayToTheScript (MWD $ gpDatum gparams)  $ Ada.lovelaceValueOf $ gpAmount gparams 
      ledgerTx <- submitTxConstraints tValidator tx
      void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                                  
-     logInfo @String $ printf "Send some value %d lovelace to the contract." $ gpAmount gparams    
+     Plutus.Contract.logInfo @String $ printf "Send some value %d lovelace to the contract." $ gpAmount gparams    
     
 grab :: forall w s e. AsContractError e => Integer -> Contract w s e ()                                     
 grab n = do
@@ -96,14 +102,28 @@ grab n = do
                                                                                                      
     ledgerTx <- submitTxConstraintsWith @Void lookups tx                                             -- Allow the wallet to construct the tx with the necesary information
     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                                                -- Wait for confirmation
-    logInfo @String $ "collected gifts"                                                              -- Log information 
+    Plutus.Contract.logInfo @String $ "collected gifts"                                                              -- Log information 
 
 endpoints :: Contract () GiftSchema Text ()
 endpoints = awaitPromise (give' `select` grab') >> endpoints                                         -- Asynchronously wait for the endpoints interactions from the wallet
   where                                                                                              -- and recursively wait for the endpoints all over again
     give' = endpoint @"give" give                                                                    -- block until give
-    grab' = endpoint @"grab" grab                                                                    -- block until grab
-                                                              
+    grab' = endpoint @"grab" grab                                                                    -- block until grab                                                           
 
 mkSchemaDefinitions ''GiftSchema                                                                     -- Generate the Schema for that
 mkKnownCurrencies [] 
+
+--SIMULATION RELATED CODE
+
+test01 :: IO ()
+test01 = runEmulatorTraceIO $ do
+          h1 <- activateContractWallet (knownWallet 1) endpoints
+          h2 <- activateContractWallet (knownWallet 2) endpoints
+          h3 <- activateContractWallet (knownWallet 3) endpoints
+          callEndpoint @"give" h1 $ GP {
+                                      gpAmount = 51000000
+                                    , gpDatum  = 100}
+          void $ Emulator.waitNSlots 10
+          callEndpoint @"grab" h2 100 
+          s <- Emulator.waitNSlots 10
+          Extras.logInfo $ "End of Simulation at slot " ++ show s          
