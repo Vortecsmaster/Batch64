@@ -55,3 +55,42 @@ curSymbol = scriptCurrencySymbol . policy
 
 --OFF-CHAIN
 
+data MintParams = MintParams
+    { mpTokenName :: !TokenName
+    , mpAmout     :: !Integer
+    } deriving (Generic, ToJSON, FromJSON, ToSchema) 
+
+type FreeSchema = Endpoint "mint" MintParams
+
+mint :: MintParams -> Contract w FreeSchema Text ()
+mint mp = do
+    pkh <- Contract.ownPaymentPubKeyHash
+    let val     = Value.singleton (curSymbol pkh) (mpTokenName mp) (mpAmout mp)
+        lookups = Constraints.mintingPolicy $ policy pkh
+        tx      = Constraints.mustMintValue val
+    ledgerTx <- submitTxConstraintsWith @Void lookups tx
+    void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
+    Contract.logInfo @String $ printf "Forged %s" (show val)
+
+endpoints :: Contract () FreeSchema Text ()
+endpoints = mint' >> endpoints
+  where
+    mint' = awaitPromise $ endpoint @"mint" mint
+
+mkSchemaDefinitions ''FreeSchema
+mkKnownCurrencies []
+
+test :: IO ()
+test = runEmulatorTraceIO $ do
+       h1 <- activateContractWallet (knownWallet 1) endpoints
+       h2 <- activateContractWallet (knownWallet 2) endpoints
+       callEndpoint @"mint" h1 $ MintParams
+                        { mpTokenName = "Batch64coin" 
+                        , mpAmout     = 1100
+                        }
+       void $ Emulator.waitNSlots 10
+       callEndpoint @"mint" h2 $ MintParams
+                        { mpTokenName = "Batch64coin"
+                        , mpAmout     = 2200   
+                        }
+       void $ Emulator.waitNSlots 10
