@@ -44,14 +44,22 @@ import           Text.Printf            (printf)
 signedMintingPolicy :: PaymentPubKeyHash -> () -> ScriptContext -> Bool
 signedMintingPolicy pkh () sContext = txSignedBy (scriptContextTxInfo sContext) $ unPaymentPubKeyHash pkh
 
+{-# INLINABLE redemerMintingPolicy #-}
+redeemerMintingPolicy :: PaymentPubKeyHash -> ScriptContext -> Bool
+redeemerMintingPolicy pkh sContext = txSignedBy (scriptContextTxInfo sContext) $ unPaymentPubKeyHash pkh
+
 policy :: PaymentPubKeyHash -> Scripts.MintingPolicy
 policy pkh = mkMintingPolicyScript $
              $$(PlutusTx.compile [|| Scripts.wrapMintingPolicy . signedMintingPolicy ||])
              `PlutusTx.applyCode`
              PlutusTx.liftCode pkh
 
-curSymbol :: PaymentPubKeyHash -> CurrencySymbol
-curSymbol = scriptCurrencySymbol . policy
+redeemerPolicy :: Scripts.MintingPolicy
+redeemerPolicy = mkMintingPolicyScript $$(PlutusTx.compile [|| Scripts.wrapMintingPolicy signedMintingPolicy ||])
+
+
+redeemerCurSymbol :: CurrencySymbol
+redeemerCurSymbol = scriptCurrencySymbol policy
 
 --OFF-CHAIN
 
